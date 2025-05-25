@@ -1,0 +1,540 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retro Radio Audio Player</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Press Start 2P', cursive;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #2E2E2E, #000);
+      color: #FFF;
+    }
+    .player-container {
+      background: #4A4A4A; /* Dark gray radio body */
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.7), inset 0 0 5px rgba(255, 255, 255, 0.2);
+      width: 100%;
+      max-width: 500px;
+      border: 4px solid #000;
+      image-rendering: pixelated;
+      position: relative;
+    }
+    .speaker-grille {
+      background: repeating-linear-gradient(
+        45deg,
+        #FFF 0px,
+        #FFF 2px,
+        #4A4A4A 2px,
+        #4A4A4A 4px
+      );
+      height: 30px;
+      margin-bottom: 15px;
+      border: 2px solid #000;
+      border-radius: 5px;
+    }
+    .tuning-dial {
+      background: #000;
+      height: 20px;
+      margin-bottom: 15px;
+      border: 2px solid #D32F2F;
+      border-radius: 3px;
+      position: relative;
+    }
+    .tuning-dial::before {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 50%;
+      width: 4px;
+      height: 16px;
+      background: #D32F2F;
+      transform: translateX(-50%);
+    }
+    .input-container {
+      display: flex;
+      margin-bottom: 15px;
+    }
+    #playlist-url {
+      flex: 1;
+      padding: 10px;
+      border: 3px solid #000;
+      border-right: none;
+      border-radius: 5px 0 0 5px;
+      font-size: 10px;
+      background: #FFF;
+      color: #000;
+      font-family: 'Press Start 2P', cursive;
+    }
+    #load-playlist {
+      padding: 10px 20px;
+      border: 3px solid #000;
+      background: #D32F2F; /* Red radio button */
+      color: #FFF;
+      border-radius: 0 5px 5px 0;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'Press Start 2P', cursive;
+      transition: background 0.2s;
+    }
+    #load-playlist:hover {
+      background: #B71C1C;
+    }
+    #player {
+      display: none; /* Hide video player */
+    }
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 15px 0;
+    }
+    .controls button {
+      background: #D32F2F;
+      color: #FFF;
+      border: 3px solid #000;
+      padding: 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'Press Start 2P', cursive;
+      transition: background 0.2s;
+      box-shadow: 2px 2px 0 #000, -2px -2px 0 #FFF; /* Embossed effect */
+    }
+    .controls button:hover {
+      background: #B71C1C;
+      box-shadow: 1px 1px 0 #000, -1px -1px 0 #FFF;
+    }
+    .progress-container {
+      width: 100%;
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #progress-bar {
+      flex: 1;
+      height: 8px;
+      background: #FFF;
+      border: 2px solid #000;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #progress {
+      height: 100%;
+      background: #D32F2F;
+      width: 0;
+      border-radius: 3px;
+    }
+    #current-time, #duration {
+      font-size: 8px;
+      color: #FFF;
+    }
+    #track-info {
+      text-align: center;
+      margin-bottom: 15px;
+      font-size: 10px;
+      color: #FFF;
+      text-shadow: 1px 1px #000;
+    }
+    #playlist {
+      max-height: 150px;
+      overflow-y: auto;
+      list-style: none;
+      padding: 0;
+      background: rgba(255, 255, 255, 0.8);
+      border: 2px solid #000;
+      border-radius: 5px;
+    }
+    #playlist li {
+      display: flex;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #000;
+      font-size: 8px;
+      color: #000;
+      font-family: 'Press Start 2P', cursive;
+    }
+    #playlist li:hover {
+      background: rgba(211, 47, 47, 0.5);
+    }
+    #playlist li.active {
+      background: rgba(211, 47, 47, 0.8);
+      color: #FFF;
+    }
+    .queue-controls {
+      display: flex;
+      gap: 5px;
+      margin-left: 10px;
+    }
+    .queue-controls button {
+      background: #4A4A4A;
+      color: #FFF;
+      border: 2px solid #000;
+      padding: 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 8px;
+      font-family: 'Press Start 2P', cursive;
+      transition: background 0.2s;
+    }
+    .queue-controls button:hover {
+      background: #D32F2F;
+    }
+    .error-message {
+      color: #D32F2F;
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 8px;
+      display: none;
+      text-shadow: 1px 1px #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="player-container">
+    <div class="speaker-grille"></div>
+    <div class="tuning-dial"></div>
+    <div class="error-message" id="error-message"></div>
+    <div class="input-container">
+      <input type="text" id="playlist-url" placeholder="Paste YouTube Playlist URL">
+      <button id="load-playlist">Load</button>
+    </div>
+    <div id="track-info">No track loaded</div>
+    <div id="player"></div>
+    <div class="controls">
+      <button id="prev-btn">Previous</button>
+      <button id="play-pause-btn">Play</button>
+      <button id="next-btn">Next</button>
+    </div>
+    <div class="progress-container">
+      <div id="progress-bar">
+        <div id="progress"></div>
+      </div>
+      <span id="current-time">0:00</span> / <span id="duration">0:00</span>
+    </div>
+    <ul id="playlist"></ul>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let player;
+    let playlistItems = [];
+    let currentTrackIndex = 0;
+    let isPlaying = false;
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        height: '0',
+        width: '0',
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange,
+          'onError': onPlayerError
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      console.log('Player is ready');
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        isPlaying = true;
+        document.getElementById('play-pause-btn').textContent = 'Pause';
+        updateProgress();
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        isPlaying = false;
+        document.getElementById('play-pause-btn').textContent = 'Play';
+      } else if (event.data === YT.PlayerState.ENDED) {
+        nextTrack();
+      }
+    }
+
+    function onPlayerError(event) {
+      console.error('Player error:', event.data);
+      showError('Failed to load video. Please try another playlist or check the URL.');
+    }
+
+    document.getElementById('load-playlist').addEventListener('click', () => {
+      const url = document.getElementById('playlist-url').value.trim();
+      const playlistId = extractPlaylistId(url);
+      if (playlistId) {
+        document.getElementById('error-message').style.display = 'none';
+        fetchPlaylistItems(playlistId);
+      } else {
+        showError('Invalid YouTube playlist URL. Please ensure it includes a valid "list" parameter.');
+      }
+    });
+
+    function extractPlaylistId(url) {
+      const regex = /(?:youtube\.com\/.*list=|youtu\.be\/.*list=)([a-zA-Z0-9_-]+)/i;
+      const match = url.match(regex);
+      return match ? match[1] : null;
+    }
+
+    async function fetchPlaylistItems(playlistId) {
+      try {
+        console.log('Fetching playlist with ID:', playlistId);
+        playlistItems = [];
+        document.getElementById('playlist').innerHTML = '';
+        document.getElementById('track-info').textContent = 'Loading playlist...';
+
+        player.loadPlaylist({
+          list: playlistId,
+          listType: 'playlist',
+          index: 0,
+          startSeconds: 0
+        });
+
+        const ul = document.getElementById('playlist');
+        for (let i = 0; i < 5; i++) {
+          const title = `Track ${i + 1} (Demo)`;
+          playlistItems.push({ title, videoId: `video${i}` });
+          const li = document.createElement('li');
+          li.dataset.index = i;
+
+          const titleSpan = document.createElement('span');
+          titleSpan.textContent = title;
+          titleSpan.style.flex = '1';
+
+          const queueControls = document.createElement('div');
+          queueControls.className = 'queue-controls';
+
+          const upBtn = document.createElement('button');
+          upBtn.textContent = '↑';
+          upBtn.addEventListener('click', () => moveTrackUp(i));
+
+          const downBtn = document.createElement('button');
+          downBtn.textContent = '↓';
+          downBtn.addEventListener('click', () => moveTrackDown(i));
+
+          queueControls.appendChild(upBtn);
+          queueControls.appendChild(downBtn);
+          li.appendChild(titleSpan);
+          li.appendChild(queueControls);
+
+          li.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'BUTTON') {
+              currentTrackIndex = parseInt(li.dataset.index);
+              playTrack();
+            }
+          });
+          ul.appendChild(li);
+        }
+
+        updateTrackInfo();
+        updatePlaylistUI();
+      } catch (error) {
+        console.error('Error fetching playlist:', error);
+        showError('Failed to load playlist. Please check your internet connection or try another playlist.');
+      }
+    }
+
+    function moveTrackUp(index) {
+      if (index > 0) {
+        [playlistItems[index], playlistItems[index - 1]] = [playlistItems[index - 1], playlistItems[index]];
+        if (currentTrackIndex === index) {
+          currentTrackIndex--;
+        } else if (currentTrackIndex === index - 1) {
+          currentTrackIndex++;
+        }
+        updatePlaylistUI();
+        renderPlaylist();
+      }
+    }
+
+    function moveTrackDown(index) {
+      if (index < playlistItems.length - 1) {
+        [playlistItems[index], playlistItems[index + 1]] = [playlistItems[index + 1], playlistItems[index]];
+        if (currentTrackIndex === index) {
+          currentTrackIndex++;
+        } else if (currentTrackIndex === index + 1) {
+          currentTrackIndex--;
+        }
+        updatePlaylistUI();
+        renderPlaylist();
+      }
+    }
+
+    function renderPlaylist() {
+      const ul = document.getElementById('playlist');
+      ul.innerHTML = '';
+      playlistItems.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.dataset.index = index;
+
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = item.title;
+        titleSpan.style.flex = '1';
+
+        const queueControls = document.createElement('div');
+        queueControls.className = 'queue-controls';
+
+        const upBtn = document.createElement('button');
+        upBtn.textContent = '↑';
+        upBtn.addEventListener('click', () => moveTrackUp(index));
+
+        const downBtn = document.createElement('button');
+        downBtn.textContent = '↓';
+        downBtn.addEventListener('click', () => moveTrackDown(index));
+
+        queueControls.appendChild(upBtn);
+        queueControls.appendChild(downBtn);
+        li.appendChild(titleSpan);
+        li.appendChild(queueControls);
+
+        li.addEventListener('click', (e) => {
+          if (e.target.tagName !== 'BUTTON') {
+            currentTrackIndex = parseInt(li.dataset.index);
+            playTrack();
+          }
+        });
+        ul.appendChild(li);
+      });
+      updatePlaylistUI();
+    }
+
+    function showError(message) {
+      const errorElement = document.getElementById('error-message');
+      errorElement.textContent = message;
+      errorElement.style.display = 'block';
+      document.getElementById('track-info').textContent = 'No track loaded';
+      document.getElementById('playlist').innerHTML = '';
+    }
+
+    function playTrack() {
+      if (playlistItems.length === 0) {
+        showError('No tracks available to play.');
+        return;
+      }
+      player.playVideoAt(currentTrackIndex);
+      updateTrackInfo();
+      updatePlaylistUI();
+    }
+
+    function nextTrack() {
+      if (currentTrackIndex < playlistItems.length - 1) {
+        currentTrackIndex++;
+        playTrack();
+      }
+    }
+
+    function prevTrack() {
+      if (currentTrackIndex > 0) {
+        currentTrackIndex--;
+        playTrack();
+      }
+    }
+
+    function updateTrackInfo() {
+      const track = playlistItems[currentTrackIndex] || { title: 'No track loaded' };
+      document.getElementById('track-info').textContent = track.title;
+    }
+
+    function updatePlaylistUI() {
+      const items = document.querySelectorAll('#playlist li');
+      items.forEach((item, index) => {
+        item.classList.toggle('active', index === currentTrackIndex);
+      });
+    }
+
+    function updateProgress() {
+      if (!isPlaying) return;
+      const current = player.getCurrentTime();
+      const duration = player.getDuration();
+      if (duration > 0) {
+        const percentage = (current / duration) * 100;
+        document.getElementById('progress').style.width = `${percentage}%`;
+        document.getElementById('current-time').textContent = formatTime(current);
+        document.getElementById('duration').textContent = formatTime(duration);
+      }
+      requestAnimationFrame(updateProgress);
+    }
+
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    document.getElementById('play-pause-btn').addEventListener('click', () => {
+      if (playlistItems.length === 0) {
+        showError('No playlist loaded. Please load a playlist first.');
+        return;
+      }
+      if (isPlaying) {
+        player.pauseVideo();
+      } else {
+        player.playVideo();
+      }
+    });
+
+    document.getElementById('next-btn').addEventListener('click', nextTrack);
+    document.getElementById('prev-btn').addEventListener('click', prevTrack);
+
+    document.getElementById('progress-bar').addEventListener('click', (e) => {
+      if (playlistItems.length === 0) return;
+      const rect = e.target.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const width = rect.width;
+      const percentage = clickX / width;
+      const duration = player.getDuration();
+      if (duration > 0) {
+        player.seekTo(percentage * duration);
+      }
+    });
+  </script>
+</body>
+</html>
